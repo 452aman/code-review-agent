@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #0b1020;
+  --color-ink-900: #111833;
+  --color-ink-800: #1a2347;
+  --color-accent: #7c5cff;
+}
+
+body { @apply bg-slate-50 text-slate-800 antialiased; }
+.lf-marker { background: rgba(124, 92, 255, 0.14); border-left: 3px solid #7c5cff; }
+.lf-critical { background: rgba(244, 63, 94, 0.16); border-left: 3px solid #f43f5e; }
+.lf-high { background: rgba(249, 115, 22, 0.16); border-left: 3px solid #f97316; }
+.lf-medium { background: rgba(245, 158, 11, 0.14); border-left: 3px solid #f59e0b; }
+.lf-low { background: rgba(14, 165, 233, 0.12); border-left: 3px solid #0ea5e9; }
+.lf-info { background: rgba(100, 116, 139, 0.1); border-left: 3px solid #94a3b8; }
+
+@layer components {
+  .card { @apply rounded-xl border border-slate-200 bg-white shadow-sm; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:opacity-50; }
+  .btn-ghost { @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50; }
+  .input { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-violet-100; }
+  .label { @apply mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500; }
+}
