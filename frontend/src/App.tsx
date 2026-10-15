@@ -14,7 +14,7 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="new" element={<NewReview />} />
         <Route path="rules" element={<Rules />} />
-        <Route path="reviews/:id" element={<Suspense fallback={<p className="text-slate-500">Loading…</p>}><ReviewDetail /></Suspense>} />
+        <Route path="reviews/:id" element={<Suspense fallback={<p className="text-slate-400">Loading…</p>}><ReviewDetail /></Suspense>} />
       </Route>
     </Routes>
   )

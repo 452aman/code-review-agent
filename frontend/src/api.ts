@@ -10,8 +10,8 @@ export const errMsg = (e: unknown): string => {
 }
 
 export const sevColor: Record<string, string> = {
-  critical: 'bg-rose-100 text-rose-700 ring-rose-200', high: 'bg-orange-100 text-orange-700 ring-orange-200',
-  medium: 'bg-amber-100 text-amber-700 ring-amber-200', low: 'bg-sky-100 text-sky-700 ring-sky-200',
-  info: 'bg-slate-100 text-slate-600 ring-slate-200',
+  critical: 'bg-rose-400/15 text-rose-300 ring-rose-400/30', high: 'bg-orange-400/15 text-orange-300 ring-orange-400/30',
+  medium: 'bg-amber-400/15 text-amber-300 ring-amber-400/30', low: 'bg-sky-400/15 text-sky-300 ring-sky-400/30',
+  info: 'bg-white/[0.07] text-slate-300 ring-white/10',
 }
 export const gradeColor = (g: string | null) => ({ A: '#10b981', B: '#84cc16', C: '#f59e0b', D: '#f97316', F: '#f43f5e' } as Record<string, string>)[g ?? ''] ?? '#94a3b8'

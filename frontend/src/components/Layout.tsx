@@ -1,4 +1,5 @@
-import { BookOpen, LayoutDashboard, PlusCircle, ShieldCheck } from 'lucide-react'
+import { BookOpen, LayoutDashboard, PlusCircle } from 'lucide-react'
+import Logo from './Logo'
 import { NavLink, Outlet } from 'react-router-dom'
 
 const cls = ({ isActive }: { isActive: boolean }) =>
@@ -7,9 +8,9 @@ const cls = ({ isActive }: { isActive: boolean }) =>
 export default function Layout() {
   return (
     <div className="min-h-screen">
-      <header className="bg-ink-950">
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#070a14]/70 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center gap-6 px-4 py-3">
-          <div className="flex items-center gap-2 text-lg font-bold text-white"><ShieldCheck className="text-accent" />Code Review Agent</div>
+          <div className="flex items-center gap-2 text-lg font-bold text-white"><Logo />Code Review Agent</div>
           <nav className="flex gap-1">
             <NavLink to="/" end className={cls}><LayoutDashboard size={16} />Dashboard</NavLink>
             <NavLink to="/new" className={cls}><PlusCircle size={16} />New review</NavLink>
