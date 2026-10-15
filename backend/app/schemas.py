@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class FileIn(BaseModel):
@@ -41,6 +41,11 @@ class FindingOut(BaseModel):
     fingerprint: str | None = None
     is_new: bool = True
 
+    @field_validator("is_new", mode="before")
+    @classmethod
+    def _legacy_new(cls, v):   # rows written before baselines existed
+        return True if v is None else v
+
 
 class ReviewSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -57,11 +62,22 @@ class ReviewSummary(BaseModel):
     baseline_id: str | None = None
     created_at: datetime
 
+    @field_validator("gate", mode="before")
+    @classmethod
+    def _legacy_gate(cls, v):  # NULL in rows written before the quality gate existed
+        return v or {}
+
 
 class ReviewOut(ReviewSummary):
     summary: str
     error: str | None
     config: dict = {}
+
+    @field_validator("config", mode="before")
+    @classmethod
+    def _legacy_config(cls, v):
+        return v or {}
+
     files: list[dict]
     events: list[dict]
     findings: list[FindingOut]

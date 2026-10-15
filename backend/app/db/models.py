@@ -75,7 +75,7 @@ def get_db():
         yield db
 
 
-def ensure_schema() -> None:
+def ensure_schema(eng=None) -> None:
     """Add columns introduced after a database was created (create_all only creates missing tables). Idempotent."""
     from sqlalchemy import inspect, text
 
@@ -83,8 +83,9 @@ def ensure_schema() -> None:
         "reviews": {"baseline_id": "VARCHAR(32)", "config": "JSON", "gate": "JSON", "meta": "JSON"},
         "findings": {"fingerprint": "VARCHAR(40)", "is_new": "BOOLEAN DEFAULT 1"},
     }
-    insp = inspect(engine)
-    with engine.begin() as conn:
+    eng = eng or engine
+    insp = inspect(eng)
+    with eng.begin() as conn:
         for table, cols in additions.items():
             if not insp.has_table(table):
                 continue
@@ -92,3 +93,9 @@ def ensure_schema() -> None:
             for col, ddl in cols.items():
                 if col not in have:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
+        # ADD COLUMN leaves NULL in existing rows; backfill so old reviews look like new ones
+        if insp.has_table("reviews"):
+            for col in ("config", "gate", "meta"):
+                conn.execute(text(f"UPDATE reviews SET {col} = '{{}}' WHERE {col} IS NULL"))
+        if insp.has_table("findings"):
+            conn.execute(text("UPDATE findings SET is_new = 1 WHERE is_new IS NULL"))

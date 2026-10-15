@@ -259,3 +259,45 @@ def test_request_id_security_headers_metrics_and_readiness(client):
 def test_review_creation_is_rate_limited(client):
     codes = [client.post("/api/v1/reviews", json={"files": [{"path": "a.py", "content": "x = 1"}]}).status_code for _ in range(14)]
     assert codes[:12] == [202] * 12 and 429 in codes[12:]
+
+
+# ------------------------------------------------------------------------------------------- upgrading an old database
+LEGACY_DDL = [
+    "CREATE TABLE reviews (id VARCHAR(32) PRIMARY KEY, title VARCHAR(200), source VARCHAR(20), source_ref VARCHAR(300), status VARCHAR(20), score INTEGER, grade VARCHAR(2),"
+    " summary TEXT, stats JSON, files JSON, events JSON, error TEXT, duration_s FLOAT, created_at DATETIME)",
+    "CREATE TABLE findings (id INTEGER PRIMARY KEY, review_id VARCHAR(32), file VARCHAR(300), line INTEGER, end_line INTEGER, severity VARCHAR(10), category VARCHAR(20),"
+    " title VARCHAR(160), explanation TEXT, suggestion TEXT, fix TEXT, rule_id VARCHAR(20), source VARCHAR(30), confidence FLOAT, triage VARCHAR(12))",
+    "INSERT INTO reviews VALUES ('legacy1', 'old review', 'paste', NULL, 'done', 70, 'C', 'old summary', '{}', '[]', '[]', NULL, 1.5, '2026-09-01 10:00:00')",
+    "INSERT INTO findings VALUES (1, 'legacy1', 'a.py', 3, NULL, 'high', 'security', 'Use of eval()', '', '', NULL, 'SEC004', 'static', 0.8, 'open')",
+]
+
+
+def test_a_database_from_before_the_upgrade_is_migrated_and_still_serves(tmp_path):
+    """The real upgrade path: ALTER TABLE ADD COLUMN leaves NULLs in old rows, and the API models must cope with them."""
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+
+    from app.db.models import Review, ensure_schema
+    from app.schemas import ReviewOut, ReviewSummary
+
+    eng = create_engine(f"sqlite:///{tmp_path}/legacy.db")
+    with eng.begin() as conn:
+        for stmt in LEGACY_DDL:
+            conn.execute(text(stmt))
+    ensure_schema(eng)
+    ensure_schema(eng)                                                       # running it twice is harmless
+    with eng.connect() as conn:
+        cols = {r[1] for r in conn.execute(text("PRAGMA table_info(reviews)"))}
+        assert {"baseline_id", "config", "gate", "meta"} <= cols
+        assert conn.execute(text("SELECT count(*) FROM reviews WHERE config IS NULL OR gate IS NULL OR meta IS NULL")).scalar() == 0   # backfilled
+        assert conn.execute(text("SELECT count(*) FROM findings WHERE is_new IS NULL")).scalar() == 0
+    with Session(eng) as db:
+        r = db.get(Review, "legacy1")
+        out = ReviewOut.model_validate(r)
+        assert out.gate == {} and out.config == {} and out.findings[0].is_new is True and out.findings[0].rule_id == "SEC004"
+        with eng.begin() as conn:                                            # even if a NULL slips through, the models tolerate it
+            conn.execute(text("UPDATE reviews SET config = NULL, gate = NULL"))
+            conn.execute(text("UPDATE findings SET is_new = NULL"))
+        db.expire_all()
+        r = db.get(Review, "legacy1")
+        assert ReviewSummary.model_validate(r).gate == {} and ReviewOut.model_validate(r).findings[0].is_new is True
