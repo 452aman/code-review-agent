@@ -60,3 +60,36 @@ async def post_review(owner: str, repo: str, num: int, head_sha: str, summary: s
                          headers=_headers("application/vnd.github+json"))
         if r.status_code >= 400:
             raise GitHubError(f"Could not post review: {r.status_code} {r.text[:200]}")
+
+
+async def post_status(owner: str, repo: str, sha: str, state: str, description: str, target_url: str | None = None,
+                      client: httpx.AsyncClient | None = None) -> None:
+    """Report the quality gate as a commit status ("success" / "failure"), so branch protection can require it."""
+    if not get_settings().github_token:
+        return
+    body = {"state": state, "description": description[:140], "context": "code-review-agent/quality-gate"}
+    if target_url:
+        body["target_url"] = target_url
+    async with (client or httpx.AsyncClient(timeout=20)) as c:
+        r = await c.post(f"{API}/repos/{owner}/{repo}/statuses/{sha}", json=body, headers=_headers("application/vnd.github+json"))
+        if r.status_code >= 400:
+            raise GitHubError(f"Could not set status: {r.status_code} {r.text[:200]}")
+
+
+async def fetch_text_file(owner: str, repo: str, path: str, ref: str, client: httpx.AsyncClient | None = None) -> str | None:
+    """Fetch one file at a commit (used for .codereview.yml). Returns None when it does not exist."""
+    async with (client or httpx.AsyncClient(timeout=20)) as c:
+        r = await c.get(f"{API}/repos/{owner}/{repo}/contents/{path}", params={"ref": ref}, headers=_headers("application/vnd.github.raw+json"))
+        if r.status_code == 404:
+            return None
+        if r.status_code >= 400:
+            raise GitHubError(f"GitHub returned {r.status_code} fetching {path}")
+        return r.text
+
+
+def review_comment(f) -> str:
+    """Inline comment body. When a fix is known it is emitted as a GitHub suggestion block (one-click apply)."""
+    body = f"**{f.severity.value.upper()}** · {f.title}\n\n{f.explanation}\n\n_Suggestion:_ {f.suggestion}"
+    if f.fix and "\n" not in f.fix.strip():
+        body += f"\n\n```suggestion\n{f.fix.strip()}\n```"
+    return body

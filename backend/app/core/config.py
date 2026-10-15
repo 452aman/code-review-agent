@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173"]
     max_files: int = 30
     max_file_bytes: int = 120_000
+    log_json: bool = True
+    review_rate_limit: str = "30/minute"      # protects the LLM budget
     embedding_backend: str = "fastembed"       # "fastembed" | "hash" (offline, used in tests)
 
 

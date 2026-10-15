@@ -27,6 +27,12 @@ ingest → static analysis → FAISS retrieval ─┬─ security agent ──�
 - **Monaco code viewer** with severity-coloured line highlights, click-to-jump from any finding.
 - **Triage**: accept or dismiss findings; dismissed ones disappear from the code view.
 - **GitHub integration**: review a PR by URL (only changed lines are in scope; line numbers map to the real file), HMAC-verified `pull_request` webhook, and optional posting of findings back to the PR as inline review comments.
+- **Quality gate**: every review gets a pass/fail you can wire into CI. Defaults fail on any *critical* finding; tune it per request (`GET /api/v1/reviews/{id}/gate?fail_on=critical,high&min_score=70`) or per repo. For PRs it is also posted as a GitHub commit status (`code-review-agent/quality-gate`), so branch protection can require it.
+- **Only new issues**: each review is compared with the previous review of the same PR (or same title for pasted code). Findings are matched by a fingerprint of *the flagged line of code*, not its line number or the LLM's wording, so moving code around doesn't resurface old issues. Each finding is marked new or existing, and issues that disappeared are counted as fixed. PR comments are posted for new findings only.
+- **Applyable fixes**: where a fix is known, PR comments carry a GitHub *suggestion* block (one-click apply); pasted-code reviews can download a `git apply`-able patch (`/patch.diff`); every review exports **SARIF 2.1.0** (`/sarif`) for GitHub code scanning.
+- **Per-repo rules** (`.codereview.yml`): ignore rules or paths, re-grade severities, and set the gate. Read automatically from the PR's head commit; invalid or missing files never block a review.
+- **Crash-safe jobs**: sources are stored with the review, so interrupted reviews resume after a restart and any review can be re-run.
+- **Production plumbing**: request IDs, structured JSON logs, `/metrics`, `/ready`, security headers, a rate limit on review creation (protects the LLM budget), and GitHub Actions CI.
 - **Dashboard**: score trend, severity mix and most common issues over time.
 - **Rules explorer**: semantic search over the knowledge base.
 
@@ -43,7 +49,7 @@ cd ../frontend && npm install && npm run dev    # http://localhost:5180
 
 `docker compose up --build` serves everything on http://localhost:8081.
 
-Tests (no network or API key needed; uses a fake LLM and an offline embedder): `cd backend && code_review_agent_env/bin/python3 -m pytest`
+Tests (no network or API key needed; fake LLM and offline embedder; 29 tests covering the gate, baselines, patch/SARIF exports, recovery and GitHub payloads): `cd backend && code_review_agent_env/bin/python3 -m pytest`
 
 ## Configuration
 
@@ -53,3 +59,15 @@ Tests (no network or API key needed; uses a fake LLM and an offline embedder): `
 | `LLM_MODEL` | Default `openai/gpt-oss-120b`. |
 | `GITHUB_TOKEN` | Private PRs, and posting review comments. |
 | `GITHUB_WEBHOOK_SECRET` | Enables `POST /api/v1/webhooks/github`. |
+| `REVIEW_RATE_LIMIT` | Reviews per client per minute (default `30/minute`). |
+
+### Using the gate in CI
+
+```yaml
+- run: |
+    ID=$(curl -s -X POST $REVIEW_URL/api/v1/reviews -H 'content-type: application/json' -d "$(jq -Rs '{files:[{path:"app.py",content:.}]}' app.py)" | jq -r .id)
+    until [ "$(curl -s $REVIEW_URL/api/v1/reviews/$ID | jq -r .status)" = done ]; do sleep 3; done
+    curl -s "$REVIEW_URL/api/v1/reviews/$ID/gate" | tee gate.json; jq -e .passed gate.json
+```
+
+Note: this service has no user accounts. Put it behind your own auth/network boundary if exposed publicly.

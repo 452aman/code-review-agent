@@ -13,6 +13,7 @@ class ReviewIn(BaseModel):
     files: list[FileIn] | None = None
     pr_url: str | None = None
     post_to_github: bool = False
+    config: str | None = Field(default=None, max_length=8000, description=".codereview.yml contents (YAML)")
 
     @model_validator(mode="after")
     def one_source(self):
@@ -37,6 +38,8 @@ class FindingOut(BaseModel):
     source: str
     confidence: float
     triage: str
+    fingerprint: str | None = None
+    is_new: bool = True
 
 
 class ReviewSummary(BaseModel):
@@ -50,12 +53,15 @@ class ReviewSummary(BaseModel):
     grade: str | None
     stats: dict
     duration_s: float | None
+    gate: dict = {}
+    baseline_id: str | None = None
     created_at: datetime
 
 
 class ReviewOut(ReviewSummary):
     summary: str
     error: str | None
+    config: dict = {}
     files: list[dict]
     events: list[dict]
     findings: list[FindingOut]

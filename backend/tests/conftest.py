@@ -5,6 +5,7 @@ _tmp = tempfile.mkdtemp()
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
 os.environ["EMBEDDING_BACKEND"] = "hash"
 os.environ["GROQ_API_KEY"] = ""
+os.environ["REVIEW_RATE_LIMIT"] = "12/minute"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -35,6 +36,7 @@ def client():
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     runner.set_llm(NullLLM())
+    app.state.limiter.reset()
     with TestClient(app) as c:
         yield c
 

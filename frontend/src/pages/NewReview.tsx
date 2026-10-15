@@ -26,6 +26,15 @@ def load_all(ids):
 `
 const langOf = (p: string) => ({ py: 'python', js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript', java: 'java', go: 'go', rb: 'ruby', php: 'php', sql: 'sql' } as Record<string, string>)[p.split('.').pop() ?? ''] ?? 'plaintext'
 
+const EXAMPLE_CFG = `ignore_rules: [MNT002]        # e.g. leftover print()/console.log
+ignore_paths: ["tests/**"]
+severity_overrides:
+  SEC011: low               # debug=True is fine in this repo
+gate:
+  fail_on: [critical, high] # fail the quality gate on these
+  min_score: 60
+  only_new: true            # only count findings the change introduced`
+
 interface F { path: string; content: string }
 
 export default function NewReview() {
@@ -35,8 +44,10 @@ export default function NewReview() {
   const [active, setActive] = useState(0)
   const [prUrl, setPrUrl] = useState('')
   const [post, setPost] = useState(false)
+  const [config, setConfig] = useState('')
+  const [showCfg, setShowCfg] = useState(false)
   const submit = useMutation({
-    mutationFn: async () => (await api.post('/reviews', mode === 'pr' ? { pr_url: prUrl, post_to_github: post } : { files: files.filter((f) => f.content.trim()) })).data,
+    mutationFn: async () => (await api.post('/reviews', { ...(mode === 'pr' ? { pr_url: prUrl, post_to_github: post } : { files: files.filter((f) => f.content.trim()) }), config: config.trim() || undefined })).data,
     onSuccess: (r) => navigate(`/reviews/${r.id}`),
   })
   const update = (patch: Partial<F>) => setFiles(files.map((f, i) => (i === active ? { ...f, ...patch } : f)))
@@ -78,6 +89,13 @@ export default function NewReview() {
             onChange={(v) => update({ content: v ?? '' })} options={{ minimap: { enabled: false }, fontSize: 13 }} />
         </div>
       )}
+      <div className="card p-4">
+        <button className="flex w-full items-center justify-between text-sm font-medium" onClick={() => setShowCfg(!showCfg)}>Review rules (.codereview.yml) <span className="text-xs text-slate-500">{showCfg ? 'hide' : config.trim() ? 'custom' : 'optional'}</span></button>
+        {showCfg && (<div className="mt-3 space-y-2">
+          <textarea className="input font-mono text-xs" rows={7} value={config} onChange={(e) => setConfig(e.target.value)} placeholder={EXAMPLE_CFG} />
+          <p className="text-xs text-slate-500">For pull requests, a <code>.codereview.yml</code> in the repository is used automatically. Rules pasted here override it.</p>
+          <button className="btn-ghost" onClick={() => setConfig(EXAMPLE_CFG)}>Insert example</button></div>)}
+      </div>
       {submit.isError && <p className="rounded-lg bg-rose-400/10 px-3 py-2 text-sm text-rose-300">{errMsg(submit.error)}</p>}
       <button className="btn" disabled={!canSubmit || submit.isPending} onClick={() => submit.mutate()}>{submit.isPending ? 'Starting…' : 'Run review'}</button>
     </div>
