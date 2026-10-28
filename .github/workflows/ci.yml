@@ -23,6 +23,10 @@ jobs:
         run: python -m pytest -q
         env:
           EMBEDDING_BACKEND: hash
+      - name: "Evaluation harness (labelled cases)"
+        run: python -m app.evaluation
+        env:
+          EMBEDDING_BACKEND: hash
 
   frontend:
     runs-on: ubuntu-latest

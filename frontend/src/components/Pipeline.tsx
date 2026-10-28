@@ -5,7 +5,7 @@ const STAGES: { key: string; label: string; parallel?: boolean }[] = [
   { key: 'ingest', label: 'Ingest' }, { key: 'static_analysis', label: 'Static analysis' }, { key: 'retrieve', label: 'FAISS retrieval' },
   { key: 'security', label: 'Security agent', parallel: true }, { key: 'bugs', label: 'Bug agent', parallel: true },
   { key: 'performance', label: 'Performance agent', parallel: true }, { key: 'maintainability', label: 'Maintainability agent', parallel: true },
-  { key: 'verify', label: 'Verify & merge' }, { key: 'summarize', label: 'Summarize' },
+  { key: 'verify', label: 'Verify & merge' }, { key: 'calibrate', label: 'Severity check' }, { key: 'summarize', label: 'Summarize' },
 ]
 
 function status(events: PipelineEvent[], key: string) {

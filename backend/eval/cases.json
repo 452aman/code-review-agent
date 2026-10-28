@@ -1,0 +1,271 @@
+{
+  "cases": [
+    {
+      "id": "hardcoded-secret",
+      "path": "config.py",
+      "code": "import os\n\nDB_URL = os.environ[\"DB_URL\"]\nAPI_KEY = \"sk-live-9f8e7d6c5b4a3\"\n",
+      "expected": [
+        {
+          "anchor": "API_KEY =",
+          "category": "security",
+          "severity": "critical"
+        }
+      ]
+    },
+    {
+      "id": "sql-injection",
+      "path": "repo.py",
+      "code": "def get_user(cur, uid):\n    cur.execute(\"SELECT * FROM users WHERE id = %s\" % uid)\n    return cur.fetchone()\n",
+      "expected": [
+        {
+          "anchor": "cur.execute",
+          "category": "security",
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "id": "eval-input",
+      "path": "calc.py",
+      "code": "def run(expr):\n    return eval(expr)\n",
+      "expected": [
+        {
+          "anchor": "eval(expr)",
+          "category": "security",
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "id": "shell-true",
+      "path": "deploy.py",
+      "code": "import subprocess\n\ndef ping(host):\n    subprocess.run(\"ping -c1 \" + host, shell=True)\n",
+      "expected": [
+        {
+          "anchor": "subprocess.run",
+          "category": "security",
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "id": "unsafe-pickle",
+      "path": "cache.py",
+      "code": "import pickle\n\ndef load(blob):\n    return pickle.loads(blob)\n",
+      "expected": [
+        {
+          "anchor": "pickle.loads",
+          "category": "security",
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "id": "weak-hash",
+      "path": "auth.py",
+      "code": "import hashlib\n\ndef digest(pw):\n    return hashlib.md5(pw.encode()).hexdigest()\n",
+      "expected": [
+        {
+          "anchor": "hashlib.md5",
+          "category": "security",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "id": "tls-off",
+      "path": "client.py",
+      "code": "import requests\n\ndef fetch(url):\n    return requests.get(url, timeout=5, verify=False)\n",
+      "expected": [
+        {
+          "anchor": "verify=False",
+          "category": "security",
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "id": "mutable-default",
+      "path": "util.py",
+      "code": "def add(item, bucket=[]):\n    bucket.append(item)\n    return bucket\n",
+      "expected": [
+        {
+          "anchor": "def add",
+          "category": "bug",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "id": "swallowed-error",
+      "path": "job.py",
+      "code": "def run(task):\n    try:\n        task()\n    except Exception:\n        pass\n",
+      "expected": [
+        {
+          "anchor": "except Exception",
+          "category": "bug",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "id": "no-timeout",
+      "path": "api.py",
+      "code": "import requests\n\ndef status(url):\n    return requests.get(url).status_code\n",
+      "expected": [
+        {
+          "anchor": "requests.get",
+          "category": "performance",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "id": "triple-loop",
+      "path": "match.py",
+      "code": "def pairs(a, b, c):\n    out = []\n    for x in a:\n        for y in b:\n            for z in c:\n                out.append((x, y, z))\n    return out\n",
+      "expected": [
+        {
+          "anchor": "for x in a",
+          "category": "performance",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "id": "innerhtml",
+      "path": "view.js",
+      "code": "function show(el, html) {\n  el.innerHTML = html;\n}\n",
+      "expected": [
+        {
+          "anchor": "innerHTML",
+          "category": "security",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "id": "clean-python",
+      "path": "clean.py",
+      "code": "import logging\n\nlog = logging.getLogger(__name__)\n\n\ndef total(prices: list[float], tax: float = 0.0) -> float:\n    \"\"\"Sum prices and add tax.\"\"\"\n    subtotal = sum(prices)\n    log.debug(\"subtotal=%s\", subtotal)\n    return subtotal * (1 + tax)\n",
+      "expected": []
+    },
+    {
+      "id": "clean-js",
+      "path": "clean.js",
+      "code": "export function clamp(value, low, high) {\n  return Math.min(Math.max(value, low), high);\n}\n",
+      "expected": []
+    },
+    {
+      "id": "idor",
+      "path": "views.py",
+      "requires_llm": true,
+      "code": "def get_invoice(request, invoice_id):\n    invoice = Invoice.objects.get(id=invoice_id)\n    return invoice.to_json()\n",
+      "expected": [
+        {
+          "anchor": "Invoice.objects.get",
+          "category": "security",
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "id": "off-by-one",
+      "path": "pager.py",
+      "requires_llm": true,
+      "code": "def last_page(total, size):\n    return total // size\n",
+      "expected": [
+        {
+          "anchor": "total // size",
+          "category": "bug",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "id": "check-then-insert-race",
+      "path": "signup.py",
+      "requires_llm": true,
+      "code": "def register(db, email):\n    if not db.exists(email):\n        db.insert(email)\n",
+      "expected": [
+        {
+          "anchor": "db.insert",
+          "category": "bug",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "id": "n-plus-one",
+      "path": "report.py",
+      "requires_llm": true,
+      "code": "def totals(db, user_ids):\n    out = {}\n    for uid in user_ids:\n        out[uid] = db.query(\"select sum(x) from t where u = ?\", uid)\n    return out\n",
+      "expected": [
+        {
+          "anchor": "db.query",
+          "category": "performance",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "id": "none-attribute",
+      "path": "profile.py",
+      "requires_llm": true,
+      "code": "def city(user):\n    return user.address.city.upper()\n",
+      "expected": [
+        {
+          "anchor": "user.address.city",
+          "category": "bug",
+          "severity": "medium"
+        }
+      ]
+    }
+  ],
+  "retrieval": [
+    {
+      "query": "user input concatenated into a SQL query string",
+      "expect": "OWASP-A03"
+    },
+    {
+      "query": "password hashed with md5",
+      "expect": "OWASP-A02"
+    },
+    {
+      "query": "api key written directly in source code",
+      "expect": "SEC-SECRETS"
+    },
+    {
+      "query": "list used as a default argument value",
+      "expect": "PY-MUTABLE-DEFAULT"
+    },
+    {
+      "query": "except block that just passes and hides errors",
+      "expect": "PY-EXCEPT"
+    },
+    {
+      "query": "time.sleep inside an async function blocks the event loop",
+      "expect": "BUG-ASYNC"
+    },
+    {
+      "query": "file opened but never closed",
+      "expect": "BUG-RESOURCE"
+    },
+    {
+      "query": "pickle loads data from an untrusted source",
+      "expect": "OWASP-A08"
+    },
+    {
+      "query": "assigning user text to innerHTML",
+      "expect": "OWASP-XSS"
+    },
+    {
+      "query": "server fetches a URL supplied by the user",
+      "expect": "SEC-SSRF"
+    },
+    {
+      "query": "check a row exists then insert it, two requests can interleave",
+      "expect": "BUG-RACE"
+    }
+  ]
+}

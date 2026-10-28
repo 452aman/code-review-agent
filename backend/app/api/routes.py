@@ -176,6 +176,13 @@ async def search_rules(q: str = Query(min_length=2, max_length=200), category: s
     return await asyncio.to_thread(index.search, q, k, category)
 
 
+@router.post("/evaluation/run")
+async def run_evaluation():
+    """Score the deterministic pipeline against the labelled cases in eval/cases.json (no LLM, no network)."""
+    from app import evaluation
+    return await evaluation.evaluate()
+
+
 @router.get("/stats")
 def stats(db: Session = Depends(get_db)):
     done = db.scalars(select(Review).where(Review.status == "done").order_by(Review.created_at.desc()).limit(30)).all()

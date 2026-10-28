@@ -1,7 +1,7 @@
 """The review pipeline as a LangGraph state machine.
 
 ingest -> static_analysis -> retrieve ->  [security | bugs | performance | maintainability]  (parallel)
-       -> verify -> summarize
+       -> verify -> calibrate (severity rubric) -> summarize
 """
 import asyncio
 import logging
@@ -16,6 +16,7 @@ from app.analysis.static import analyze
 from app.core.config import get_settings
 from app.core.types import SEVERITY_ORDER, SEVERITY_WEIGHT, Category, Finding, Severity, Source, SourceFile
 from app.rag.index import KnowledgeIndex
+from app.services.severity import calibrate, tier
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ class ReviewState(TypedDict, total=False):
     score: int
     grade: str
     stats: dict
+    calibration: dict
 
 
 def numbered(f: SourceFile) -> str:
@@ -164,7 +166,10 @@ def build_graph(llm: ReviewLLM, index: KnowledgeIndex):
         by_path = {f.path: f for f in state["files"]}
         kept: list[Finding] = list(state.get("static", []))
         rejected = 0
-        for f in state.get("agent_findings", []):
+        # The four agents run in parallel and finish in any order. Sorting their output first makes the merge
+        # below independent of timing, so the same input always produces the same result.
+        agent_findings = sorted(state.get("agent_findings", []), key=lambda f: (f.source.value, f.file, f.line, f.title))
+        for f in agent_findings:
             src = by_path.get(f.file)
             if not src or f.line > len(src.content.splitlines()):
                 rejected += 1
@@ -174,7 +179,7 @@ def build_graph(llm: ReviewLLM, index: KnowledgeIndex):
                 continue
             kept.append(f)
         # Rank so that static findings (trusted) and higher severities anchor each cluster.
-        kept.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.source != Source.static))
+        kept.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.source != Source.static, f.file, f.line, f.title))
         merged: list[Finding] = []
         for f in kept:
             twin = next((m for m in merged if m.file == f.file and abs(m.line - f.line) <= 1 and same_issue(m, f)), None)
@@ -185,13 +190,35 @@ def build_graph(llm: ReviewLLM, index: KnowledgeIndex):
                 merged[idx] = twin.model_copy(update={
                     "explanation": twin.explanation or f.explanation, "fix": twin.fix or f.fix,
                     "suggestion": twin.suggestion or f.suggestion, "confidence": max(twin.confidence, f.confidence)})
-        final = sorted(merged, key=lambda f: (SEVERITY_ORDER[f.severity], f.file, f.line))
+        final = sorted(merged, key=lambda f: (SEVERITY_ORDER[f.severity], f.file, f.line, f.title))
         score, grade = score_of(final)
         counts = {s.value: sum(1 for f in final if f.severity == s) for s in Severity}
         await emit("verify", "done", {"kept": len(final), "rejected": rejected})
         return {"findings": final, "score": score, "grade": grade,
                 "stats": {"by_severity": counts, "rejected_hallucinations": rejected,
                           "by_category": {c.value: sum(1 for f in final if f.category == c) for c in Category}}}
+
+    async def calibrate_severity(state: ReviewState, config):
+        """Post-generation validation: check every agent-assigned severity against the explicit rubric."""
+        emit = emit_of(config)
+        await emit("calibrate", "running", {})
+        checked, adjusted, changes = 0, 0, []
+        out: list[Finding] = []
+        for f in state["findings"]:
+            new, note = calibrate(f)
+            checked += f.source != Source.static
+            if note:
+                adjusted += 1
+                changes.append(note)
+            out.append(new)
+        final = sorted(out, key=lambda f: (SEVERITY_ORDER[f.severity], f.file, f.line, f.title))
+        score, grade = score_of(final)
+        stats = dict(state["stats"])
+        stats["by_severity"] = {s.value: sum(1 for f in final if f.severity == s) for s in Severity}
+        stats["by_tier"] = {t: sum(1 for f in final if tier(f.severity) == t) for t in ("high", "medium", "low")}
+        calibration = {"checked": checked, "adjusted": adjusted, "changes": changes[:50]}
+        await emit("calibrate", "done", {"checked": checked, "adjusted": adjusted})
+        return {"findings": final, "score": score, "grade": grade, "stats": stats, "calibration": calibration}
 
     async def summarize(state: ReviewState, config):
         emit = emit_of(config)
@@ -221,6 +248,7 @@ def build_graph(llm: ReviewLLM, index: KnowledgeIndex):
     for name in AGENTS:
         g.add_node(name, make_agent(name))
     g.add_node("verify", verify)
+    g.add_node("calibrate", calibrate_severity)
     g.add_node("summarize", summarize)
     g.add_edge(START, "ingest")
     g.add_edge("ingest", "static_analysis")
@@ -228,7 +256,8 @@ def build_graph(llm: ReviewLLM, index: KnowledgeIndex):
     for name in AGENTS:
         g.add_edge("retrieve", name)
     g.add_edge(list(AGENTS), "verify")  # join: wait for all four specialists
-    g.add_edge("verify", "summarize")
+    g.add_edge("verify", "calibrate")
+    g.add_edge("calibrate", "summarize")
     g.add_edge("summarize", END)
     return g.compile()
 

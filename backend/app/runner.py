@@ -15,6 +15,7 @@ from app.rag.index import get_index
 from app.services import fingerprint as fp
 from app.services import gate as gate_svc
 from app.services.config import ReviewConfig, apply_config
+from app.services.severity import tier
 from app.services_events import hub
 
 log = logging.getLogger(__name__)
@@ -48,10 +49,12 @@ def find_baseline(db, review: Review) -> Review | None:
     return db.scalars(q.order_by(Review.created_at.desc()).limit(1)).first()
 
 
-def _stats(findings, rejected: int, suppressed: int, new: int, existing: int, fixed: list[dict]) -> dict:
+def _stats(findings, rejected: int, suppressed: int, new: int, existing: int, fixed: list[dict], calibration: dict | None = None) -> dict:
     return {"by_severity": {s.value: sum(1 for f in findings if f.severity == s) for s in Severity},
             "by_category": {c.value: sum(1 for f in findings if f.category == c) for c in Category},
             "rejected_hallucinations": rejected, "suppressed_by_config": suppressed,
+            "by_tier": {t: sum(1 for f in findings if tier(f.severity) == t) for t in ("high", "medium", "low")},
+            "severity_calibration": calibration or {"checked": 0, "adjusted": 0, "changes": []},
             "new": new, "existing": existing, "fixed": len(fixed), "fixed_items": fixed[:20]}
 
 
@@ -92,7 +95,7 @@ async def _run(review_id: str, files: list[SourceFile], on_done) -> None:
                 db.flush()
                 gate = gate_svc.evaluate([{"severity": x.severity, "triage": x.triage, "is_new": x.is_new} for x in rows], score, cfg.gate, has_baseline=bool(base))
                 r.status, r.score, r.grade, r.summary = "done", score, grade, result["summary"]
-                r.stats = _stats(findings, result["stats"]["rejected_hallucinations"], suppressed, sum(is_new), len(is_new) - sum(is_new), fixed)
+                r.stats = _stats(findings, result["stats"]["rejected_hallucinations"], suppressed, sum(is_new), len(is_new) - sum(is_new), fixed, result.get("calibration"))
                 r.gate = gate
                 r.duration_s = round(time.perf_counter() - t0, 2)
                 r.events = hub.history.get(review_id, [])

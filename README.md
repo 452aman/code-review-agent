@@ -1,6 +1,6 @@
 # Autonomous Code Review Agent
 
-A multi-agent code reviewer. Paste code or point it at a GitHub pull request and a LangGraph pipeline runs static analysis, retrieves relevant review guidance from a FAISS index, fans out to four specialist LLM agents in parallel, then **verifies** their output before ranking and scoring it.
+A multi-agent code reviewer. Paste code or point it at a GitHub pull request and a LangGraph pipeline runs static analysis, retrieves relevant review guidance from a FAISS index, fans out to four specialist LLM agents in parallel, then **verifies** their output and **checks every severity against an explicit rubric** before ranking and scoring it.
 
 **Stack:** FastAPI · LangGraph · Groq (LLM) · FAISS + fastembed (bge-small) · SQLAlchemy · SSE · React 19 · TypeScript · Monaco · TanStack Query · Tailwind · Recharts · Docker
 
@@ -11,6 +11,7 @@ ingest → static analysis → FAISS retrieval ─┬─ security agent ──�
                                             ├─ bug agent ────────────┤
                                             ├─ performance agent ────┼→ verify & merge → summarize
                                             └─ maintainability agent ┘
+                                         verify & merge → severity check → summarize
 ```
 
 | Stage | What it does |
@@ -19,7 +20,33 @@ ingest → static analysis → FAISS retrieval ─┬─ security agent ──�
 | **Retrieval (RAG)** | A curated 33-entry knowledge base (OWASP, Python pitfalls, performance, maintainability) is embedded with `bge-small-en-v1.5` and indexed in FAISS. Each agent receives the top matches for its own category, seeded with the static findings. |
 | **Parallel agents** | Four LangGraph nodes run concurrently and return structured JSON (Pydantic schema: line, severity, explanation, suggestion, optional replacement code). Calls are concurrency-limited and retried with the server's `retry-after` hint on rate limits. If an agent fails, the review degrades instead of failing. |
 | **Verifier** | Drops findings pointing at lines that don't exist or (for PRs) weren't changed, then merges duplicates reported by several agents using title overlap on nearby lines, keeping the highest severity and the richest explanation. The UI shows how many unsupported findings were rejected. |
+| **Severity check** | A post-generation validation node (`services/severity.py`). LLMs are least reliable at *severity*: the same issue comes back "high" one run and "medium" the next, and a style nit can be called "critical". Every agent-assigned severity is checked against an explicit rule set that gives each kind of issue an allowed band (for example, `critical` is reachable only for exploitable flaws such as injection or leaked secrets, never for style or maintainability). A severity outside its band is clamped into it and the change is recorded in `stats.severity_calibration` with the reason. Static findings come from fixed rules and are never touched. Results are also reported in 3 tiers (high / medium / low). |
+| **Determinism** | The four agents run in parallel and finish in any order, so their output is sorted before merging and every sort has a full tie-break. The same input therefore yields the same findings, order and score (covered by a test with randomised agent timing). The LLM runs at temperature 0. |
 | **Scoring** | Severity-weighted penalty with exponential decay → 0-100 score and A-F grade. |
+
+## Evaluation
+
+Quality is measured, not asserted. `eval/cases.json` holds labelled code samples (what a correct review must find and the severity it should get, plus clean files that must produce nothing) and labelled questions for the FAISS rule corpus. `app/evaluation.py` scores the real pipeline against them:
+
+```bash
+cd backend
+python -m app.evaluation          # readable report
+python -m app.evaluation --json   # for CI;  POST /api/v1/evaluation/run does the same over HTTP
+```
+
+Latest run (deterministic stages only: static analysis, retrieval, verifier and severity check, no LLM, no network):
+
+| Measure | Result |
+|---|---|
+| Labelled cases | 19 (14 detectable by the rules, 5 that need the LLM agents, 2 clean files) |
+| Precision | 100% (0 false positives) |
+| Recall, rule-detectable issues | 100% (12 of 12) |
+| Recall, overall | 71% (12 of 17): the 5 misses are logic issues (IDOR, off-by-one, check-then-insert race, N+1 query, missing None check) that only the LLM agents can find |
+| Severity correct on matched findings | 100% exact |
+| Identical findings on repeat runs | 100% |
+| Rule-corpus retrieval (FAISS, `bge-small`) | hit@1 91%, hit@3 100% over 11 questions (73% hit@3 with the offline hash embedder used in tests) |
+
+Read these numbers with care: the cases are hand-written and small, and the detectable ones were written around the implemented rules, so this suite catches **regressions** and makes changes comparable. It is not a claim of real-world accuracy. The five agent-only cases are kept on purpose so the gap is visible; pass a real LLM to `evaluate()` to measure the agents.
 
 ## Product features
 
