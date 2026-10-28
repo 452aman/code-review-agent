@@ -48,6 +48,12 @@ Latest run (deterministic stages only: static analysis, retrieval, verifier and 
 
 Read these numbers with care: the cases are hand-written and small, and the detectable ones were written around the implemented rules, so this suite catches **regressions** and makes changes comparable. It is not a claim of real-world accuracy. The five agent-only cases are kept on purpose so the gap is visible; pass a real LLM to `evaluate()` to measure the agents.
 
+## Scope and limits
+
+- **Static, not executed.** Submitted code is parsed and read, never run, so there is no code-execution risk and no sandbox. Findings are suggestions for a human to triage.
+- **A pipeline, not a single ReAct loop.** The graph is fixed (static analysis, retrieval, four parallel agents, verify, severity check, summarize), which keeps it predictable, testable and cheaper than a free-roaming agent.
+- **Repeatable after generation, not before.** Everything downstream of the model is deterministic, but the model's own findings and wording can still differ between runs.
+
 ## Product features
 
 - **Live pipeline view**: server-sent events stream each node's progress; late subscribers replay from persisted history.
